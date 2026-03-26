@@ -1,7 +1,8 @@
 """
-CUDA libraries auto-downloader for Windows.
+CUDA libraries auto-downloader.
 
-Downloads cuDNN and cuBLAS from NVIDIA's public CDN and extracts to ~/.VoiceFlow/cuda/
+On Windows: Downloads cuDNN and cuBLAS DLLs from NVIDIA's public CDN to ~/.VoiceFlow/cuda/
+On Linux: CUDA libs are provided by nvidia pip packages (cublas etc.) and preloaded at startup.
 No login required - uses the redistributable packages.
 """
 import os
@@ -16,6 +17,8 @@ from dataclasses import dataclass
 from services.logger import get_logger
 
 log = get_logger("cuda")
+
+IS_LINUX = sys.platform.startswith('linux')
 
 
 @dataclass
@@ -66,8 +69,27 @@ def get_cuda_dir() -> Path:
     return base / ".VoiceFlow" / "cuda"
 
 
+def _find_nvidia_pip_lib(lib_name: str) -> bool:
+    """Check if an nvidia .so lib exists in pip packages (Linux only)."""
+    venv_sp = os.path.join(sys.prefix, 'lib', f'python{sys.version_info.major}.{sys.version_info.minor}', 'site-packages')
+    nvidia_dir = os.path.join(venv_sp, 'nvidia')
+    if not os.path.isdir(nvidia_dir):
+        return False
+    for pkg in os.listdir(nvidia_dir):
+        lib_dir = os.path.join(nvidia_dir, pkg, 'lib')
+        if os.path.isdir(lib_dir):
+            for f in os.listdir(lib_dir):
+                if f.startswith(lib_name):
+                    return True
+    return False
+
+
 def is_cudnn_installed() -> bool:
-    """Check if cuDNN DLLs are already installed locally."""
+    """Check if cuDNN libraries are already installed."""
+    if IS_LINUX:
+        # On Linux, cuDNN is either bundled in ctranslate2 or not required
+        return True
+
     cuda_dir = get_cuda_dir()
     if not cuda_dir.exists():
         return False
@@ -80,7 +102,11 @@ def is_cudnn_installed() -> bool:
 
 
 def is_cublas_installed() -> bool:
-    """Check if cuBLAS DLLs are already installed locally."""
+    """Check if cuBLAS libraries are already installed."""
+    if IS_LINUX:
+        # On Linux, check nvidia pip packages for libcublas
+        return _find_nvidia_pip_lib('libcublas')
+
     cuda_dir = get_cuda_dir()
     if not cuda_dir.exists():
         return False
@@ -220,6 +246,12 @@ def download_cudnn(
     global _download_progress
     import urllib.request
     import ssl
+
+    # On Linux, CUDA libs come from pip packages - no download needed
+    if IS_LINUX:
+        if is_cuda_libs_installed():
+            return True, None
+        return False, "On Linux, install nvidia-cublas-cu12 pip package for CUDA support."
 
     # Reset and start progress tracking
     reset_download_progress()

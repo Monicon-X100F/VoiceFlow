@@ -76,8 +76,8 @@ def _check_cudnn_available() -> tuple[bool, Optional[str]]:
         Tuple of (is_available, error_message)
     """
     if sys.platform != "win32":
-        # On Linux, cuDNN is typically bundled or in LD_LIBRARY_PATH
-        # We'll rely on the ctranslate2 check
+        # On Linux, cuDNN is either bundled into ctranslate2 or not required.
+        # The nvidia cublas pip packages (preloaded at startup) provide what's needed.
         return True, None
 
     # First, add local cuDNN to PATH if it exists

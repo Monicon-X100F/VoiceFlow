@@ -1,8 +1,74 @@
+import sys
+import os
+
+# ============================================================================
+# Linux: Preload CUDA libraries from nvidia pip packages before any CUDA imports
+# ============================================================================
+if sys.platform.startswith('linux'):
+    def _preload_nvidia_libs():
+        """Preload nvidia .so libs from pip packages so ctranslate2/faster-whisper can find them."""
+        import ctypes
+        venv_sp = os.path.join(sys.prefix, 'lib', f'python{sys.version_info.major}.{sys.version_info.minor}', 'site-packages')
+        nvidia_dir = os.path.join(venv_sp, 'nvidia')
+        if not os.path.isdir(nvidia_dir):
+            return
+        for pkg in sorted(os.listdir(nvidia_dir)):
+            lib_dir = os.path.join(nvidia_dir, pkg, 'lib')
+            if not os.path.isdir(lib_dir):
+                continue
+            for f in sorted(os.listdir(lib_dir)):
+                if f.endswith('.so') or '.so.' in f:
+                    try:
+                        ctypes.CDLL(os.path.join(lib_dir, f), mode=ctypes.RTLD_GLOBAL)
+                    except OSError:
+                        pass
+
+    try:
+        _preload_nvidia_libs()
+    except Exception:
+        pass  # Best-effort, don't crash on failure
+
+    def _setup_hyprland_window_rules():
+        """Set Hyprland window rules for the popup overlay if running under Hyprland."""
+        if not os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
+            return
+        import subprocess
+        rules = [
+            "float on, match:title Recording",
+            "pin on, match:title Recording",
+            "no_initial_focus on, match:title Recording",
+            "border_size 0, match:title Recording",
+            "tag -default-opacity, match:title Recording",
+            "opacity 1 1, match:title Recording",
+            "move (monitor_w-window_w)/2 (monitor_h-100), match:title Recording",
+        ]
+        for rule in rules:
+            try:
+                subprocess.run(['hyprctl', 'keyword', 'windowrule', rule],
+                               capture_output=True, timeout=2)
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                break
+
+    try:
+        _setup_hyprland_window_rules()
+    except Exception:
+        pass
+
+    # Force Qt WebEngine to use GPU rendering instead of Pyloid's software fallback
+    # The libEGL/Vulkan warnings trigger Pyloid to switch to software backend,
+    # but the GPU actually works — the warnings are benign on modern NVIDIA+Wayland.
+    os.environ.setdefault('QTWEBENGINE_CHROMIUM_FLAGS',
+        '--enable-features=WebRTCPipeWireCapturer '
+        '--ignore-certificate-errors --allow-insecure-localhost '
+        '--disable-gpu-driver-bug-workarounds '
+        '--enable-gpu-rasterization '
+        '--enable-native-gpu-memory-buffers'
+    )
+
 from pyloid.tray import TrayEvent
 from pyloid.utils import get_production_path, is_production
 from pyloid.serve import pyloid_serve
 from pyloid import Pyloid
-import sys
 
 from PySide6.QtCore import QObject, Signal, Qt
 from PySide6.QtWidgets import QWidget

@@ -1,13 +1,14 @@
-import keyboard
+import sys
 from typing import Callable, Optional
 import threading
 from services.logger import get_logger
 
 log = get_logger("hotkey")
 
+# Platform detection
+IS_LINUX = sys.platform.startswith('linux')
 
 # Canonical modifier order for consistent hotkey strings
-# This order matches what the keyboard library expects
 MODIFIER_ORDER = ['ctrl', 'alt', 'shift', 'win']
 VALID_MODIFIERS = {'ctrl', 'alt', 'shift', 'win', 'windows', 'left windows', 'right windows'}
 
@@ -106,6 +107,73 @@ def are_hotkeys_conflicting(hotkey1: str, hotkey2: str) -> bool:
     return normalize_hotkey(hotkey1) == normalize_hotkey(hotkey2)
 
 
+# ============================================================================
+# evdev helpers for Linux - reads directly from /dev/input, bypasses Wayland
+# ============================================================================
+if IS_LINUX:
+    import evdev
+    import select
+
+    # Map evdev key codes to VoiceFlow key names
+    _EVDEV_MODIFIER_CODES = {
+        evdev.ecodes.KEY_LEFTCTRL: 'ctrl',
+        evdev.ecodes.KEY_RIGHTCTRL: 'ctrl',
+        evdev.ecodes.KEY_LEFTALT: 'alt',
+        evdev.ecodes.KEY_RIGHTALT: 'alt',
+        evdev.ecodes.KEY_LEFTSHIFT: 'shift',
+        evdev.ecodes.KEY_RIGHTSHIFT: 'shift',
+        evdev.ecodes.KEY_LEFTMETA: 'win',
+        evdev.ecodes.KEY_RIGHTMETA: 'win',
+    }
+
+    # Map evdev key codes to regular key names
+    _EVDEV_KEY_MAP = {
+        evdev.ecodes.KEY_SPACE: 'space',
+        evdev.ecodes.KEY_ENTER: 'enter',
+        evdev.ecodes.KEY_TAB: 'tab',
+        evdev.ecodes.KEY_ESC: 'esc',
+        evdev.ecodes.KEY_BACKSPACE: 'backspace',
+        evdev.ecodes.KEY_DELETE: 'delete',
+        evdev.ecodes.KEY_UP: 'up',
+        evdev.ecodes.KEY_DOWN: 'down',
+        evdev.ecodes.KEY_LEFT: 'left',
+        evdev.ecodes.KEY_RIGHT: 'right',
+    }
+    # Add letter keys
+    for i in range(26):
+        _EVDEV_KEY_MAP[getattr(evdev.ecodes, f'KEY_{chr(65+i)}')] = chr(97+i)
+    # Add number keys
+    for i in range(10):
+        code = getattr(evdev.ecodes, f'KEY_{i}', None)
+        if code:
+            _EVDEV_KEY_MAP[code] = str(i)
+    # Add function keys
+    for i in range(1, 13):
+        _EVDEV_KEY_MAP[getattr(evdev.ecodes, f'KEY_F{i}')] = f'f{i}'
+
+    def _evdev_code_to_name(code: int) -> Optional[str]:
+        """Convert evdev keycode to VoiceFlow key name."""
+        if code in _EVDEV_MODIFIER_CODES:
+            return _EVDEV_MODIFIER_CODES[code]
+        return _EVDEV_KEY_MAP.get(code)
+
+    def _find_keyboard_devices() -> list[evdev.InputDevice]:
+        """Find all keyboard input devices."""
+        keyboards = []
+        for path in evdev.list_devices():
+            try:
+                dev = evdev.InputDevice(path)
+                caps = dev.capabilities()
+                if evdev.ecodes.EV_KEY in caps:
+                    key_codes = caps[evdev.ecodes.EV_KEY]
+                    # Must have letter keys to be a real keyboard
+                    if evdev.ecodes.KEY_A in key_codes and evdev.ecodes.KEY_Z in key_codes:
+                        keyboards.append(dev)
+            except (PermissionError, OSError):
+                continue
+        return keyboards
+
+
 class HotkeyService:
     def __init__(self):
         # Callbacks
@@ -123,6 +191,12 @@ class HotkeyService:
         self._hold_hotkey_enabled: bool = True
         self._toggle_hotkey: str = "ctrl+shift+win"
         self._toggle_hotkey_enabled: bool = False
+
+        # Linux evdev state
+        if IS_LINUX:
+            self._evdev_thread: Optional[threading.Thread] = None
+            self._evdev_stop = threading.Event()
+            self._pressed_keys: set[str] = set()
 
     def set_callbacks(
         self,
@@ -189,28 +263,6 @@ class HotkeyService:
         if self._on_activate:
             self._on_activate()
 
-    def _check_hold_release(self, event):
-        """Check if hold hotkey should be deactivated on key release."""
-        if not self._hold_active:
-            return
-
-        # Check if all required keys are still pressed
-        keys = self._parse_hotkey_keys(self._hold_hotkey)
-        all_pressed = True
-        for key in keys:
-            if key == 'win':
-                # Check various windows key names
-                if not (keyboard.is_pressed('win') or keyboard.is_pressed('windows')):
-                    all_pressed = False
-                    break
-            elif not keyboard.is_pressed(key):
-                all_pressed = False
-                break
-
-        if not all_pressed:
-            log.debug("Hold key released", key=event.name)
-            self._deactivate_hold()
-
     def _deactivate_hold(self):
         """Deactivate hold mode recording."""
         if not self._hold_active:
@@ -269,24 +321,46 @@ class HotkeyService:
         elif self._toggle_active:
             self._deactivate_toggle()
 
-    # Hotkey registration
+    # ========================================================================
+    # Platform-specific hotkey registration
+    # ========================================================================
+
     def _register_hotkeys(self):
         """Register all enabled hotkeys."""
-        if self._hold_hotkey_enabled and self._hold_hotkey:
-            self._register_hold_hotkey()
-        if self._toggle_hotkey_enabled and self._toggle_hotkey:
-            self._register_toggle_hotkey()
+        if IS_LINUX:
+            self._register_hotkeys_evdev()
+        else:
+            self._register_hotkeys_keyboard()
 
     def _unregister_hotkeys(self):
         """Unregister all hotkeys and release handlers."""
+        if IS_LINUX:
+            self._unregister_hotkeys_evdev()
+        else:
+            self._unregister_hotkeys_keyboard()
+
+    # --- Windows: keyboard library ---
+
+    def _register_hotkeys_keyboard(self):
+        """Register hotkeys using the keyboard library (Windows)."""
+        import keyboard
+        if self._hold_hotkey_enabled and self._hold_hotkey:
+            self._register_hold_hotkey_keyboard()
+        if self._toggle_hotkey_enabled and self._toggle_hotkey:
+            self._register_toggle_hotkey_keyboard()
+
+    def _unregister_hotkeys_keyboard(self):
+        """Unregister all hotkeys (Windows)."""
         try:
+            import keyboard
             keyboard.unhook_all()
         except Exception as e:
             log.error("Failed to unregister hotkeys", error=str(e))
 
-    def _register_hold_hotkey(self):
-        """Register hold-to-record hotkey with press/release handling."""
-        log.info("Registering hold hotkey", hotkey=self._hold_hotkey)
+    def _register_hold_hotkey_keyboard(self):
+        """Register hold-to-record hotkey using keyboard library (Windows)."""
+        import keyboard
+        log.info("Registering hold hotkey (keyboard)", hotkey=self._hold_hotkey)
         try:
             keyboard.add_hotkey(self._hold_hotkey, self._on_hold_press, suppress=False)
 
@@ -294,29 +368,139 @@ class HotkeyService:
             keys = self._parse_hotkey_keys(self._hold_hotkey)
             for key in keys:
                 try:
-                    keyboard.on_release_key(key, self._check_hold_release)
-                    # Also register windows key variants
+                    keyboard.on_release_key(key, self._check_hold_release_keyboard)
                     if key == 'win':
-                        keyboard.on_release_key('windows', self._check_hold_release)
-                        keyboard.on_release_key('left windows', self._check_hold_release)
-                        keyboard.on_release_key('right windows', self._check_hold_release)
+                        keyboard.on_release_key('windows', self._check_hold_release_keyboard)
+                        keyboard.on_release_key('left windows', self._check_hold_release_keyboard)
+                        keyboard.on_release_key('right windows', self._check_hold_release_keyboard)
                 except Exception as e:
                     log.warning("Failed to register release handler for key", key=key, error=str(e))
 
             log.info("Hold hotkey registered successfully", hotkey=self._hold_hotkey)
         except Exception as e:
             log.error("Failed to register hold hotkey", hotkey=self._hold_hotkey, error=str(e))
-            # Don't crash - just log the error and continue without this hotkey
 
-    def _register_toggle_hotkey(self):
-        """Register toggle hotkey - single press toggles recording."""
-        log.info("Registering toggle hotkey", hotkey=self._toggle_hotkey)
+    def _check_hold_release_keyboard(self, event):
+        """Check if hold hotkey should be deactivated on key release (Windows)."""
+        import keyboard
+        if not self._hold_active:
+            return
+
+        keys = self._parse_hotkey_keys(self._hold_hotkey)
+        all_pressed = True
+        for key in keys:
+            if key == 'win':
+                if not (keyboard.is_pressed('win') or keyboard.is_pressed('windows')):
+                    all_pressed = False
+                    break
+            elif not keyboard.is_pressed(key):
+                all_pressed = False
+                break
+
+        if not all_pressed:
+            log.debug("Hold key released", key=event.name)
+            self._deactivate_hold()
+
+    def _register_toggle_hotkey_keyboard(self):
+        """Register toggle hotkey using keyboard library (Windows)."""
+        import keyboard
+        log.info("Registering toggle hotkey (keyboard)", hotkey=self._toggle_hotkey)
         try:
             keyboard.add_hotkey(self._toggle_hotkey, self._on_toggle_press, suppress=False)
             log.info("Toggle hotkey registered successfully", hotkey=self._toggle_hotkey)
         except Exception as e:
             log.error("Failed to register toggle hotkey", hotkey=self._toggle_hotkey, error=str(e))
-            # Don't crash - just log the error and continue without this hotkey
+
+    # --- Linux: evdev (reads directly from /dev/input, bypasses Wayland) ---
+
+    def _register_hotkeys_evdev(self):
+        """Start evdev listener thread for hotkey detection on Linux."""
+        log.info("Registering hotkeys via evdev")
+        self._evdev_stop.clear()
+        self._pressed_keys = set()
+
+        keyboards = _find_keyboard_devices()
+        if not keyboards:
+            log.error("No keyboard devices found - hotkeys will not work. Ensure user is in 'input' group.")
+            return
+
+        log.info("Found keyboard devices", count=len(keyboards),
+                 devices=[f"{d.name} ({d.path})" for d in keyboards])
+
+        self._evdev_thread = threading.Thread(
+            target=self._evdev_listener_loop,
+            args=(keyboards,),
+            daemon=True,
+        )
+        self._evdev_thread.start()
+        log.info("evdev listener started")
+
+    def _evdev_listener_loop(self, keyboards: list):
+        """Background thread: read key events from all keyboard devices."""
+        devices = {dev.fd: dev for dev in keyboards}
+
+        while not self._evdev_stop.is_set():
+            try:
+                r, _, _ = select.select(list(devices.keys()), [], [], 0.1)
+                for fd in r:
+                    dev = devices[fd]
+                    try:
+                        for event in dev.read():
+                            if event.type == evdev.ecodes.EV_KEY:
+                                self._handle_evdev_key(event)
+                    except OSError:
+                        # Device disconnected
+                        log.warning("Keyboard device disconnected", device=dev.name)
+                        del devices[fd]
+                        if not devices:
+                            log.error("All keyboard devices disconnected")
+                            return
+            except Exception as e:
+                if not self._evdev_stop.is_set():
+                    log.error("evdev listener error", error=str(e))
+
+    def _handle_evdev_key(self, event):
+        """Handle a single evdev key event."""
+        name = _evdev_code_to_name(event.code)
+        if not name:
+            return
+
+        if event.value == 1:  # Key press
+            self._pressed_keys.add(name)
+            self._check_hotkey_combo_press()
+        elif event.value == 0:  # Key release
+            # Check hold release before removing the key
+            if self._hold_active:
+                hold_keys = set(self._parse_hotkey_keys(self._hold_hotkey))
+                if name in hold_keys:
+                    log.debug("Hold key released (evdev)", key=name)
+                    self._deactivate_hold()
+            self._pressed_keys.discard(name)
+        # value == 2 is key repeat, ignore
+
+    def _check_hotkey_combo_press(self):
+        """Check if the currently pressed keys match any registered hotkey combo."""
+        # Check hold hotkey
+        if self._hold_hotkey_enabled and self._hold_hotkey:
+            hold_keys = set(self._parse_hotkey_keys(self._hold_hotkey))
+            if hold_keys.issubset(self._pressed_keys):
+                self._on_hold_press()
+
+        # Check toggle hotkey
+        if self._toggle_hotkey_enabled and self._toggle_hotkey:
+            toggle_keys = set(self._parse_hotkey_keys(self._toggle_hotkey))
+            if toggle_keys.issubset(self._pressed_keys):
+                if not self._hold_active:
+                    self._on_toggle_press()
+
+    def _unregister_hotkeys_evdev(self):
+        """Stop evdev listener thread."""
+        if hasattr(self, '_evdev_stop'):
+            self._evdev_stop.set()
+        if hasattr(self, '_evdev_thread') and self._evdev_thread:
+            self._evdev_thread.join(timeout=2)
+            self._evdev_thread = None
+            log.info("evdev listener stopped")
 
     # Public API
     def start(self):

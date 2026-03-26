@@ -419,7 +419,13 @@ class AppController:
         try:
             folder_path = str(self.db.db_path.parent)
             info(f"Opening data folder: {folder_path}")
-            os.startfile(folder_path)
+            import subprocess, sys
+            if sys.platform == 'win32':
+                os.startfile(folder_path)
+            elif sys.platform == 'darwin':
+                subprocess.Popen(['open', folder_path])
+            else:
+                subprocess.Popen(['xdg-open', folder_path])
         except Exception as e:
             error(f"Failed to open data folder: {e}")
 
