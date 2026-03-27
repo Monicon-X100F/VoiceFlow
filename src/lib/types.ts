@@ -15,6 +15,8 @@ export interface Settings {
   holdHotkeyEnabled: boolean;
   toggleHotkey: string;
   toggleHotkeyEnabled: boolean;
+  // Transcription settings
+  prependSpace: boolean;
 }
 
 export interface HistoryEntry {

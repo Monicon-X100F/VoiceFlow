@@ -55,6 +55,8 @@ class Settings:
     hold_hotkey_enabled: bool = True
     toggle_hotkey: str = "ctrl+shift+win"
     toggle_hotkey_enabled: bool = False
+    # Transcription settings
+    prepend_space: bool = False  # Add leading space before pasted text
 
 
 class SettingsService:
@@ -83,6 +85,8 @@ class SettingsService:
             hold_hotkey_enabled=self.db.get_setting("hold_hotkey_enabled", "true") == "true",
             toggle_hotkey=self.db.get_setting("toggle_hotkey", "ctrl+shift+win"),
             toggle_hotkey_enabled=self.db.get_setting("toggle_hotkey_enabled", "false") == "true",
+            # Transcription settings
+            prepend_space=self.db.get_setting("prepend_space", "false") == "true",
         )
         self._cache = settings
         return settings
@@ -104,6 +108,7 @@ class SettingsService:
         toggle_hotkey: Optional[str] = None,
         toggle_hotkey_enabled: Optional[bool] = None,
         show_popup: Optional[bool] = None,
+        prepend_space: Optional[bool] = None,
     ) -> Settings:
         if language is not None:
             self.db.set_setting("language", language)
@@ -125,6 +130,8 @@ class SettingsService:
             self.db.set_setting("save_audio_to_history", "true" if save_audio_to_history else "false")
         if show_popup is not None:
             self.db.set_setting("show_popup", "true" if show_popup else "false")
+        if prepend_space is not None:
+            self.db.set_setting("prepend_space", "true" if prepend_space else "false")
         # Hotkey settings - normalize before storing for consistent format
         if hold_hotkey is not None:
             self.db.set_setting("hold_hotkey", normalize_hotkey(hold_hotkey))

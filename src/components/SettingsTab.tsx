@@ -25,6 +25,7 @@ import {
   ToggleRight,
   HardDrive,
   Eye,
+  WholeWord,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Settings, Options, GpuInfo } from "@/lib/types";
@@ -420,6 +421,33 @@ export function SettingsTab() {
             </div>
             <p className="text-xs text-muted-foreground mt-3">
               Audio stays on your device. When enabled, History items show an Audio badge with playback.
+            </p>
+          </BentoSettingCard>
+
+          {/* Prepend Space */}
+          <BentoSettingCard
+            title="Prepend Space"
+            description="Add a leading space before each transcription"
+            icon={WholeWord}
+            className="md:col-span-6 lg:col-span-4"
+          >
+            <div className="mt-auto flex items-center justify-between p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors">
+              <Label
+                htmlFor="prepend-space"
+                className="font-medium cursor-pointer"
+              >
+                Add space before text
+              </Label>
+              <Switch
+                id="prepend-space"
+                checked={settings.prependSpace}
+                onCheckedChange={(checked) =>
+                  updateSetting("prependSpace", checked)
+                }
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              Useful for continuous dictation — prevents sentences from running together.
             </p>
           </BentoSettingCard>
 

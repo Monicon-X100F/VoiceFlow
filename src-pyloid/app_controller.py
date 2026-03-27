@@ -174,6 +174,10 @@ class AppController:
                 info(f"Transcription result: '{text}'")
 
                 if text:
+                    # Prepend space if enabled (useful for continuous dictation)
+                    if settings.prepend_space:
+                        text = " " + text
+
                     # Paste at cursor
                     info("Pasting text at cursor...")
                     self.clipboard_service.paste_at_cursor(text)
@@ -235,6 +239,7 @@ class AppController:
             "holdHotkeyEnabled": settings.hold_hotkey_enabled,
             "toggleHotkey": settings.toggle_hotkey,
             "toggleHotkeyEnabled": settings.toggle_hotkey_enabled,
+            "prependSpace": settings.prepend_space,
         }
 
     def update_settings(self, **kwargs) -> dict:
@@ -249,6 +254,8 @@ class AppController:
             mapped["save_audio_to_history"] = kwargs["saveAudioToHistory"]
         if "showPopup" in kwargs:
             mapped["show_popup"] = kwargs["showPopup"]
+        if "prependSpace" in kwargs:
+            mapped["prepend_space"] = kwargs["prependSpace"]
         # Hotkey settings (camelCase to snake_case)
         if "holdHotkey" in kwargs:
             mapped["hold_hotkey"] = kwargs["holdHotkey"]
