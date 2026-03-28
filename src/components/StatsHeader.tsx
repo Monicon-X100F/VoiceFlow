@@ -77,11 +77,6 @@ export function StatsHeader() {
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
       {/* Hero Card - Words */}
       <div className="md:col-span-2 glass-card overflow-hidden relative group">
-        {/* Animated Glow orbs */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="orb orb-primary w-[400px] h-[400px] absolute -top-32 -right-32 opacity-40 transition-transform duration-700 group-hover:scale-110" />
-          <div className="orb orb-secondary w-[250px] h-[250px] absolute bottom-0 left-1/4 opacity-20 transition-transform duration-700 group-hover:translate-y-4" />
-        </div>
 
         <div className="p-8 relative z-10 flex flex-col h-full justify-between min-h-[220px]">
           <div className="space-y-3">
@@ -102,7 +97,7 @@ export function StatsHeader() {
           <div className="mt-8 flex gap-4 flex-wrap">
             {/* Streak */}
             <div className="glass-strong flex items-center gap-3 rounded-2xl px-5 py-3">
-              <div className="p-2 bg-orange-500/20 rounded-xl text-orange-400">
+              <div className="p-2 bg-primary/15 rounded-xl text-primary">
                 <Flame className="w-5 h-5" />
               </div>
               <div>
@@ -120,7 +115,7 @@ export function StatsHeader() {
 
             {/* Notes */}
             <div className="glass-strong flex items-center gap-3 rounded-2xl px-5 py-3">
-              <div className="p-2 bg-blue-500/20 rounded-xl text-blue-400">
+              <div className="p-2 bg-primary/10 rounded-xl text-primary/70">
                 <FileText className="w-5 h-5" />
               </div>
               <div>
@@ -138,10 +133,6 @@ export function StatsHeader() {
 
       {/* Active Configuration Card */}
       <div className="glass-card flex flex-col overflow-hidden relative">
-        {/* Header orb */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="orb orb-accent w-[180px] h-[180px] absolute -top-20 -right-20 opacity-30" />
-        </div>
 
         <div className="p-6 h-full flex flex-col relative z-10">
           <div className="flex items-center justify-between mb-6">
@@ -217,7 +208,7 @@ function ConfigItem({
   return (
     <div className="group/item">
       <div className="flex items-center gap-1.5 mb-1.5">
-        <Icon className={`w-3 h-3 ${highlight ? "text-green-500" : "text-muted-foreground/60"}`} />
+        <Icon className={`w-3 h-3 ${highlight ? "text-primary" : "text-muted-foreground/60"}`} />
         <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
           {label}
         </span>
@@ -225,7 +216,7 @@ function ConfigItem({
       <div
         className={`text-sm font-semibold tracking-tight pl-4 border-l-2 transition-colors ${truncate ? "truncate" : ""} ${
           highlight
-            ? "text-green-500 border-green-500/40 group-hover/item:border-green-500"
+            ? "text-primary border-primary/40 group-hover/item:border-primary"
             : "text-foreground border-primary/20 group-hover/item:border-primary"
         }`}
         title={truncate ? value : undefined}

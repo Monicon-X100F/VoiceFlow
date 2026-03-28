@@ -41,7 +41,7 @@ export function HistoryTab() {
     try {
       await api.copyToClipboard(text);
       toast.success("Copied to clipboard");
-    } catch (error) {
+    } catch {
       // Fallback
       try {
         await navigator.clipboard.writeText(text);

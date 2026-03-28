@@ -85,10 +85,10 @@ const StepAudio = ({
       setAmplitude(e.detail);
     };
 
-    document.addEventListener("amplitude" as any, handleAmplitude);
+    document.addEventListener("amplitude", handleAmplitude as EventListener);
 
     return () => {
-      document.removeEventListener("amplitude" as any, handleAmplitude);
+      document.removeEventListener("amplitude", handleAmplitude as EventListener);
     };
   }, []);
 
@@ -307,7 +307,7 @@ const StepHardware = ({
         setDownloadError(result.error || "Failed to start download");
         setDownloading(false);
       }
-    } catch (err) {
+    } catch {
       setDownloadError("Download failed. Check your internet connection.");
       setDownloading(false);
     }
@@ -1025,7 +1025,7 @@ export function Onboarding() {
   // Apply theme in real-time
   useEffect(() => {
     const root = document.documentElement;
-    let isDark =
+    const isDark =
       theme === "system"
         ? window.matchMedia("(prefers-color-scheme: dark)").matches
         : theme === "dark";
@@ -1068,7 +1068,7 @@ export function Onboarding() {
 
   // Handle download state changes
   const handleDownloadStart = () => setIsDownloading(true);
-  const handleDownloadComplete = (_success: boolean) => setIsDownloading(false);
+  const handleDownloadComplete = () => setIsDownloading(false);
 
   // Handle download cancellation - go back to model selection
   const handleDownloadCancel = () => {

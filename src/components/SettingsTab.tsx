@@ -25,11 +25,13 @@ import {
   ToggleRight,
   HardDrive,
   Eye,
+  WholeWord,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Settings, Options, GpuInfo } from "@/lib/types";
 import { ModelDownloadModal } from "./ModelDownloadModal";
 import { HotkeyCapture } from "./HotkeyCapture";
+import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -122,6 +124,7 @@ export function SettingsTab() {
         toast.error("Failed to check model status");
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateSetting is stable within settings scope
     [settings]
   );
 
@@ -135,6 +138,7 @@ export function SettingsTab() {
       setDownloadModalOpen(false);
       setPendingModel(null);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateSetting is stable within settings scope
     [pendingModel]
   );
 
@@ -151,7 +155,7 @@ export function SettingsTab() {
       try {
         const result = await api.validateHotkey(hotkey, excludeField);
         return { valid: result.valid, error: result.error };
-      } catch (err) {
+      } catch {
         return { valid: false, error: "Failed to validate hotkey" };
       }
     },
@@ -206,6 +210,7 @@ export function SettingsTab() {
     } else {
       root.classList.remove("dark");
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally watching only settings.theme, not the full settings object
   }, [settings?.theme]);
 
   if (loading) {
@@ -228,12 +233,9 @@ export function SettingsTab() {
           <p className="text-destructive font-medium text-lg">
             {error || "Failed to load settings"}
           </p>
-          <button
-            className="px-6 py-2.5 text-sm font-medium rounded-xl bg-background border border-border shadow-sm hover:bg-secondary/50 transition-all"
-            onClick={loadSettings}
-          >
+          <Button type="button" variant="outline" onClick={loadSettings}>
             Try again
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -254,7 +256,7 @@ export function SettingsTab() {
         {/* Header */}
         <div className="flex flex-col gap-2">
           <h1 className="text-4xl md:text-5xl font-bold tracking-tighter text-foreground">
-            Sett<span className="headline-serif text-primary">ings</span>
+            Settings
           </h1>
           <p className="text-lg text-muted-foreground/80 font-light max-w-2xl">
             Customize your voice experience. All preferences are saved locally.
@@ -420,6 +422,33 @@ export function SettingsTab() {
             </div>
             <p className="text-xs text-muted-foreground mt-3">
               Audio stays on your device. When enabled, History items show an Audio badge with playback.
+            </p>
+          </BentoSettingCard>
+
+          {/* Prepend Space */}
+          <BentoSettingCard
+            title="Prepend Space"
+            description="Add a leading space before each transcription"
+            icon={WholeWord}
+            className="md:col-span-6 lg:col-span-4"
+          >
+            <div className="mt-auto flex items-center justify-between p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors">
+              <Label
+                htmlFor="prepend-space"
+                className="font-medium cursor-pointer"
+              >
+                Add space before text
+              </Label>
+              <Switch
+                id="prepend-space"
+                checked={settings.prependSpace}
+                onCheckedChange={(checked) =>
+                  updateSetting("prependSpace", checked)
+                }
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              Useful for continuous dictation — prevents sentences from running together.
             </p>
           </BentoSettingCard>
 

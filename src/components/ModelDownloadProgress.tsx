@@ -93,12 +93,12 @@ export function ModelDownloadProgress({
 
   // Set up event listeners
   useEffect(() => {
-    document.addEventListener("download-progress" as any, handleProgress);
-    document.addEventListener("download-complete" as any, handleCompleteEvent);
+    document.addEventListener("download-progress", handleProgress as EventListener);
+    document.addEventListener("download-complete", handleCompleteEvent as EventListener);
 
     return () => {
-      document.removeEventListener("download-progress" as any, handleProgress);
-      document.removeEventListener("download-complete" as any, handleCompleteEvent);
+      document.removeEventListener("download-progress", handleProgress as EventListener);
+      document.removeEventListener("download-complete", handleCompleteEvent as EventListener);
     };
   }, [handleProgress, handleCompleteEvent]);
 
@@ -108,6 +108,7 @@ export function ModelDownloadProgress({
       hasStarted.current = true;
       startDownload();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- startDownload is guarded by hasStarted.current ref
   }, [autoStart, state]);
 
   const startDownload = async () => {
