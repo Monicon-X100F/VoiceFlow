@@ -13,7 +13,7 @@ import type { Settings } from "@/lib/types";
 // making backdrop-filter/blur extremely expensive
 // Skip for popup route - it needs transparent background
 const isLinux =
-  (navigator.userAgentData?.platform ?? navigator.userAgent).includes("Linux");
+  ((navigator as unknown as { userAgentData?: { platform: string } }).userAgentData?.platform ?? navigator.userAgent).includes("Linux");
 if (isLinux && window.location.hash !== "#/popup") {
   document.documentElement.classList.add("reduced-effects");
 }
