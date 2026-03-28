@@ -12,7 +12,9 @@ import type { Settings } from "@/lib/types";
 // Qt WebEngine on Linux often falls back to software rendering,
 // making backdrop-filter/blur extremely expensive
 // Skip for popup route - it needs transparent background
-if (navigator.platform.startsWith("Linux") && window.location.hash !== "#/popup") {
+const isLinux =
+  (navigator.userAgentData?.platform ?? navigator.userAgent).includes("Linux");
+if (isLinux && window.location.hash !== "#/popup") {
   document.documentElement.classList.add("reduced-effects");
 }
 
@@ -99,7 +101,7 @@ function AppRouter() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+        <div role="status" aria-live="polite" className="text-muted-foreground">Loading...</div>
       </div>
     );
   }

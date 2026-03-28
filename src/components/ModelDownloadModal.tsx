@@ -27,7 +27,7 @@ export function ModelDownloadModal({
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
-        <DialogHeader className="sr-only">
+        <DialogHeader>
           <DialogTitle>Downloading Model</DialogTitle>
           <DialogDescription>
             Downloading the {modelName} model for transcription

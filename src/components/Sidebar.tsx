@@ -18,10 +18,9 @@ interface SidebarProps {
 export function Sidebar({ onNavigate }: SidebarProps) {
   return (
     <aside className="w-64 h-screen bg-sidebar flex flex-col border-r border-sidebar-border relative overflow-hidden">
-      {/* Animated gradient orbs */}
+      {/* Subtle orb for sidebar ambiance */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="orb orb-primary w-[200px] h-[200px] -top-20 -left-20 opacity-40" />
-        <div className="orb orb-accent w-[150px] h-[150px] bottom-40 -right-20 opacity-30" />
+        <div className="orb orb-primary w-[200px] h-[200px] -top-20 -left-20 opacity-25" />
       </div>
 
       {/* Logo Area */}
@@ -122,12 +121,12 @@ export function Sidebar({ onNavigate }: SidebarProps) {
 
           {/* Footer info */}
           <div className="pt-3 px-4 flex items-center justify-between text-[10px] text-sidebar-foreground/30 font-mono">
-            <span className="badge-glow !p-1.5 !text-[10px]">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+            <span className="flex items-center gap-1 text-[10px] text-primary/60 font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary/60" />
               v1.3.1
             </span>
             <span className="flex items-center gap-1">
-              <Heart className="w-2.5 h-2.5 text-red-500/60" />
+              <Heart className="w-2.5 h-2.5 text-primary/50" />
               Open Source
             </span>
           </div>

@@ -31,6 +31,7 @@ import { api } from "@/lib/api";
 import type { Settings, Options, GpuInfo } from "@/lib/types";
 import { ModelDownloadModal } from "./ModelDownloadModal";
 import { HotkeyCapture } from "./HotkeyCapture";
+import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -123,6 +124,7 @@ export function SettingsTab() {
         toast.error("Failed to check model status");
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateSetting is stable within settings scope
     [settings]
   );
 
@@ -136,6 +138,7 @@ export function SettingsTab() {
       setDownloadModalOpen(false);
       setPendingModel(null);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateSetting is stable within settings scope
     [pendingModel]
   );
 
@@ -152,7 +155,7 @@ export function SettingsTab() {
       try {
         const result = await api.validateHotkey(hotkey, excludeField);
         return { valid: result.valid, error: result.error };
-      } catch (err) {
+      } catch {
         return { valid: false, error: "Failed to validate hotkey" };
       }
     },
@@ -207,6 +210,7 @@ export function SettingsTab() {
     } else {
       root.classList.remove("dark");
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally watching only settings.theme, not the full settings object
   }, [settings?.theme]);
 
   if (loading) {
@@ -229,12 +233,9 @@ export function SettingsTab() {
           <p className="text-destructive font-medium text-lg">
             {error || "Failed to load settings"}
           </p>
-          <button
-            className="px-6 py-2.5 text-sm font-medium rounded-xl bg-background border border-border shadow-sm hover:bg-secondary/50 transition-all"
-            onClick={loadSettings}
-          >
+          <Button type="button" variant="outline" onClick={loadSettings}>
             Try again
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -255,7 +256,7 @@ export function SettingsTab() {
         {/* Header */}
         <div className="flex flex-col gap-2">
           <h1 className="text-4xl md:text-5xl font-bold tracking-tighter text-foreground">
-            Sett<span className="headline-serif text-primary">ings</span>
+            Settings
           </h1>
           <p className="text-lg text-muted-foreground/80 font-light max-w-2xl">
             Customize your voice experience. All preferences are saved locally.

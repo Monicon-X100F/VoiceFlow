@@ -59,7 +59,7 @@ export function HistoryPage() {
     try {
       await api.copyToClipboard(text);
       toast.success("Copied to clipboard");
-    } catch (error) {
+    } catch {
       try {
         await navigator.clipboard.writeText(text);
         toast.success("Copied to clipboard");
@@ -124,7 +124,7 @@ export function HistoryPage() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
           <div>
             <h1 className="text-4xl md:text-5xl font-bold tracking-tighter text-foreground mb-2">
-              Full <span className="headline-serif text-primary">History</span>
+              Full History
             </h1>
             <p className="text-lg text-muted-foreground/80 font-light max-w-2xl">
               A complete archive of your voice notes and dictations.
@@ -200,12 +200,13 @@ export function HistoryPage() {
                                 </Badge>
                               )}
                             </div>
-                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                            <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex gap-1">
                               <Button
                                 variant="ghost"
                                 size="icon-sm"
                                 className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
                                 onClick={() => handleCopy(entry.text)}
+                                aria-label="Copy transcription"
                               >
                                 <Copy className="h-3.5 w-3.5" />
                               </Button>
@@ -216,6 +217,7 @@ export function HistoryPage() {
                                   className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
                                   onClick={() => handlePlayAudio(entry.id)}
                                   disabled={loadingAudioFor === entry.id}
+                                  aria-label="Play audio recording"
                                 >
                                   <FileAudio className="h-3.5 w-3.5" />
                                 </Button>
@@ -225,6 +227,7 @@ export function HistoryPage() {
                                 size="icon-sm"
                                 className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                 onClick={() => handleDelete(entry.id)}
+                                aria-label="Delete transcription"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>

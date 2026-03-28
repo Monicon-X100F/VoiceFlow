@@ -1,10 +1,13 @@
-import { useEffect, useState, useLayoutEffect } from "react";
+import { useEffect, useState, useLayoutEffect, useRef } from "react";
 
 type PopupState = "idle" | "recording" | "processing";
 
 export function Popup() {
   const [state, setState] = useState<PopupState>("idle");
   const [amplitude, setAmplitude] = useState(0);
+  const prefersReducedMotion = useRef(
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
 
   useLayoutEffect(() => {
     document.documentElement.style.cssText =
@@ -25,12 +28,12 @@ export function Popup() {
       setState(e.detail.state);
     };
 
-    document.addEventListener("amplitude" as any, handleAmplitude);
-    document.addEventListener("popup-state" as any, handleState);
+    document.addEventListener("amplitude", handleAmplitude as EventListener);
+    document.addEventListener("popup-state", handleState as EventListener);
 
     return () => {
-      document.removeEventListener("amplitude" as any, handleAmplitude);
-      document.removeEventListener("popup-state" as any, handleState);
+      document.removeEventListener("amplitude", handleAmplitude as EventListener);
+      document.removeEventListener("popup-state", handleState as EventListener);
     };
   }, []);
 
@@ -107,7 +110,9 @@ export function Popup() {
                 height: "4px",
                 borderRadius: "50%",
                 background: "rgba(255, 255, 255, 0.7)",
-                animation: "fade 1s ease-in-out infinite",
+                animation: prefersReducedMotion.current
+                  ? "none"
+                  : "fade 1s ease-in-out infinite",
                 animationDelay: `${i * 0.2}s`,
               }}
             />
@@ -115,12 +120,6 @@ export function Popup() {
         </div>
       )}
 
-      <style>{`
-        @keyframes fade {
-          0%, 100% { opacity: 0.3; }
-          50% { opacity: 1; }
-        }
-      `}</style>
     </div>
   );
 }

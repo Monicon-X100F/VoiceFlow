@@ -51,7 +51,7 @@ export function HomePage() {
     try {
       await api.copyToClipboard(text);
       toast.success("Copied to clipboard");
-    } catch (error) {
+    } catch {
       try {
         await navigator.clipboard.writeText(text);
         toast.success("Copied to clipboard");
@@ -119,7 +119,7 @@ export function HomePage() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
           <div>
             <h1 className="text-4xl md:text-5xl font-bold tracking-tighter text-foreground mb-2">
-              Dash<span className="headline-serif text-primary">board</span>
+              Dashboard
             </h1>
             <p className="text-lg text-muted-foreground/80 font-light max-w-2xl">
               Your voice, organized. Manage your recent transcriptions and
@@ -154,10 +154,7 @@ export function HomePage() {
               <div className="p-2 rounded-lg bg-primary/10 text-primary">
                 <Clock className="w-5 h-5" />
               </div>
-              Recent{" "}
-              <span className="headline-serif text-muted-foreground">
-                History
-              </span>
+              Recent History
             </h2>
             <span className="badge-glow">
               {filteredHistory.length} entries
@@ -212,7 +209,7 @@ export function HomePage() {
             <div className="space-y-10">
               {Object.entries(groupedHistory).map(([dateLabel, entries]) => (
                 <div key={dateLabel} className="space-y-4">
-                  <div className="flex items-center gap-3 sticky top-0 z-10 py-3">
+                  <div className="flex items-center gap-3 sticky top-0 z-10 py-3 bg-background/95 backdrop-blur-sm">
                     <CalendarDays className="w-4 h-4 text-primary/60" />
                     <h3 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">
                       {dateLabel}
@@ -309,12 +306,13 @@ function HistoryCard({
             </Badge>
           )}
         </div>
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+        <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex gap-1">
           <Button
             variant="ghost"
             size="icon"
             className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg"
             onClick={() => onCopy(entry.text)}
+            aria-label="Copy transcription"
           >
             <Copy className="h-3.5 w-3.5" />
           </Button>
@@ -325,6 +323,7 @@ function HistoryCard({
               className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg"
               onClick={() => onPlayAudio(entry.id)}
               disabled={isLoadingAudio}
+              aria-label="Play audio recording"
             >
               <FileAudio className="h-3.5 w-3.5" />
             </Button>
@@ -334,6 +333,7 @@ function HistoryCard({
             size="icon"
             className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg"
             onClick={() => onDelete(entry.id)}
+            aria-label="Delete transcription"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
