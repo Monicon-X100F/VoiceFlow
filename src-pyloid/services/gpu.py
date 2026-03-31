@@ -7,6 +7,7 @@ without requiring torch dependency.
 import os
 import sys
 import subprocess
+import ctypes
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ DEVICE_OPTIONS = ["auto", "cpu", "cuda"]
 # Compute type mappings
 CPU_COMPUTE_TYPE = "int8"
 CUDA_COMPUTE_TYPE = "float16"
+ROCM_COMPUTE_TYPE = "float16"
 
 # cuDNN DLLs required for CUDA inference (Windows)
 CUDNN_DLLS = [
@@ -27,9 +29,19 @@ CUDNN_DLLS = [
     "cudnn_cnn64_9.dll",
 ]
 
+# ROCm shared libraries required for AMD GPU inference (Linux)
+ROCM_LIBS = [
+    "libamdhip64.so",
+    "librocblas.so",
+    "libhipblas.so",
+]
+
 # Cache for CUDA availability check result
 _cuda_available_cache: Optional[bool] = None
 _cudnn_path_added: bool = False
+
+# Cache for GPU vendor detection
+_gpu_vendor_cache: Optional[str] = "unset"
 
 
 def _get_local_cuda_dir() -> Path:
@@ -66,6 +78,144 @@ class GpuInfo:
     supported_compute_types: list[str]
     current_device: str
     current_compute_type: str
+    cudnn_available: bool
+    cudnn_message: Optional[str]
+    gpu_vendor: Optional[str]
+    rocm_available: bool
+    rocm_message: Optional[str]
+
+
+def detect_gpu_vendor() -> Optional[str]:
+    """
+    Detect GPU vendor by probing smi tools.
+
+    Returns "nvidia", "amd", or None.
+    Result is cached to avoid repeated subprocess calls.
+    """
+    global _gpu_vendor_cache
+
+    if _gpu_vendor_cache != "unset":
+        return _gpu_vendor_cache
+
+    creationflags = 0
+    try:
+        creationflags = subprocess.CREATE_NO_WINDOW
+    except AttributeError:
+        pass
+
+    # Check NVIDIA first
+    try:
+        result = subprocess.run(
+            ["nvidia-smi"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=creationflags,
+        )
+        if result.returncode == 0:
+            log.debug("NVIDIA GPU detected via nvidia-smi")
+            _gpu_vendor_cache = "nvidia"
+            return "nvidia"
+    except FileNotFoundError:
+        log.debug("nvidia-smi not found")
+    except subprocess.TimeoutExpired:
+        log.debug("nvidia-smi timed out")
+    except Exception as e:
+        log.debug("nvidia-smi error", error=str(e))
+
+    # Check AMD via rocm-smi
+    try:
+        result = subprocess.run(
+            ["rocm-smi", "--showproductname"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=creationflags,
+        )
+        if result.returncode == 0:
+            log.debug("AMD GPU detected via rocm-smi")
+            _gpu_vendor_cache = "amd"
+            return "amd"
+    except FileNotFoundError:
+        log.debug("rocm-smi not found, trying lspci")
+    except subprocess.TimeoutExpired:
+        log.debug("rocm-smi timed out")
+    except Exception as e:
+        log.debug("rocm-smi error", error=str(e))
+
+    # Fall back to lspci on Linux
+    if sys.platform.startswith("linux"):
+        try:
+            lspci = subprocess.run(
+                ["lspci"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            grep = subprocess.run(
+                ["grep", "-i", r"VGA.*AMD\|Display.*AMD"],
+                input=lspci.stdout,
+                capture_output=True,
+                text=True,
+            )
+            if grep.returncode == 0 and grep.stdout.strip():
+                log.debug("AMD GPU detected via lspci")
+                _gpu_vendor_cache = "amd"
+                return "amd"
+        except Exception as e:
+            log.debug("lspci AMD check failed", error=str(e))
+
+    log.debug("No GPU vendor detected")
+    _gpu_vendor_cache = None
+    return None
+
+
+def _check_rocm_libs_available() -> tuple[bool, Optional[str]]:
+    """
+    Check if ROCm shared libraries are available.
+
+    Returns:
+        Tuple of (is_available, error_message)
+    """
+    for lib_name in ROCM_LIBS:
+        try:
+            ctypes.CDLL(lib_name)
+        except OSError:
+            error = f"ROCm library {lib_name} not found. Install ROCm toolkit."
+            log.warning("ROCm library not found", lib=lib_name)
+            return False, error
+    log.debug("ROCm libraries found")
+    return True, None
+
+
+def _check_rocm_ctranslate2() -> bool:
+    """
+    Verify ctranslate2 was built with ROCm/HIP support.
+
+    ROCm-built ctranslate2 reports compute types for "cuda" via HIP compatibility.
+    Returns True if compute types are non-empty, False otherwise.
+    """
+    try:
+        import ctranslate2
+        compute_types = ctranslate2.get_supported_compute_types("cuda")
+        return len(compute_types) > 0
+    except Exception:
+        return False
+
+
+def get_rocm_status() -> tuple[bool, Optional[str]]:
+    """
+    Get ROCm installation status for display in UI.
+
+    Returns:
+        Tuple of (is_available, status_message)
+    """
+    available, error = _check_rocm_libs_available()
+    if available:
+        if _check_rocm_ctranslate2():
+            return True, "ROCm available"
+        return False, "ROCm libraries found but ctranslate2 not built with ROCm support"
+    return False, error or "ROCm not found"
 
 
 def _check_cudnn_available() -> tuple[bool, Optional[str]]:
@@ -135,9 +285,10 @@ def _check_cudnn_available() -> tuple[bool, Optional[str]]:
 
 def is_cuda_available() -> bool:
     """
-    Check if CUDA is available and usable (including cuDNN).
+    Check if CUDA (or ROCm via HIP) is available and usable.
 
-    Returns True if CUDA device is usable, False otherwise.
+    Returns True if a GPU device is usable, False otherwise.
+    Vendor-aware: checks cuDNN for NVIDIA, ROCm libs for AMD.
     """
     global _cuda_available_cache
 
@@ -157,16 +308,33 @@ def is_cuda_available() -> bool:
 
         log.debug("CUDA detected by ctranslate2", compute_types=list(compute_types))
 
-        # Check for cuDNN libraries
-        cudnn_available, cudnn_error = _check_cudnn_available()
-        if not cudnn_available:
-            log.warning("CUDA detected but cuDNN not available", error=cudnn_error)
-            _cuda_available_cache = False
-            return False
+        vendor = detect_gpu_vendor()
 
-        log.debug("CUDA availability check passed", available=True, compute_types=list(compute_types))
-        _cuda_available_cache = True
-        return True
+        if vendor == "amd":
+            # AMD path: verify ROCm libs and ROCm-built ctranslate2
+            rocm_libs_ok, rocm_error = _check_rocm_libs_available()
+            if not rocm_libs_ok:
+                log.warning("AMD GPU detected but ROCm libs not available", error=rocm_error)
+                _cuda_available_cache = False
+                return False
+            if not _check_rocm_ctranslate2():
+                log.warning("AMD GPU + ROCm libs present but ctranslate2 lacks ROCm/HIP support")
+                _cuda_available_cache = False
+                return False
+            log.debug("AMD ROCm availability check passed")
+            _cuda_available_cache = True
+            return True
+        else:
+            # NVIDIA path (or unknown vendor with CUDA — fall through to cuDNN check)
+            cudnn_available, cudnn_error = _check_cudnn_available()
+            if not cudnn_available:
+                log.warning("CUDA detected but cuDNN not available", error=cudnn_error)
+                _cuda_available_cache = False
+                return False
+
+            log.debug("CUDA availability check passed", available=True, compute_types=list(compute_types))
+            _cuda_available_cache = True
+            return True
 
     except Exception as e:
         log.debug("CUDA not available", error=str(e))
@@ -228,7 +396,43 @@ def get_gpu_name() -> Optional[str]:
     except subprocess.TimeoutExpired:
         log.debug("nvidia-smi timed out")
     except Exception as e:
-        log.debug("Failed to get GPU name", error=str(e))
+        log.debug("Failed to get GPU name via nvidia-smi", error=str(e))
+
+    # Try AMD via rocm-smi
+    try:
+        creationflags = 0
+        try:
+            creationflags = subprocess.CREATE_NO_WINDOW
+        except AttributeError:
+            pass
+
+        result = subprocess.run(
+            ["rocm-smi", "--showproductname"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=creationflags,
+        )
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                # rocm-smi output lines look like: "Card series: Radeon RX 7900 XTX"
+                if ":" in line:
+                    parts = line.split(":", 1)
+                    name = parts[1].strip()
+                    if name:
+                        log.debug("AMD GPU name detected", name=name)
+                        return name
+                elif line:
+                    log.debug("AMD GPU name detected", name=line)
+                    return line
+    except FileNotFoundError:
+        log.debug("rocm-smi not found")
+    except subprocess.TimeoutExpired:
+        log.debug("rocm-smi timed out")
+    except Exception as e:
+        log.debug("Failed to get GPU name via rocm-smi", error=str(e))
+
     return None
 
 
@@ -359,10 +563,11 @@ def get_cudnn_status() -> tuple[bool, Optional[str]]:
 
 
 def reset_cuda_cache():
-    """Reset the CUDA availability cache to force re-detection."""
-    global _cuda_available_cache, _cudnn_path_added
+    """Reset the CUDA availability cache and vendor cache to force re-detection."""
+    global _cuda_available_cache, _cudnn_path_added, _gpu_vendor_cache
     _cuda_available_cache = None
     _cudnn_path_added = False
+    _gpu_vendor_cache = "unset"
     log.debug("CUDA cache reset")
 
 

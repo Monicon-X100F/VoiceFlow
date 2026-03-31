@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Vite Frontend",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["vite"],
+      "port": 5173
+    },
+    {
+      "name": "Pyloid Backend",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "-p", ".venv", "./src-pyloid/main.py"],
+      "port": 0
+    }
+  ]
+}

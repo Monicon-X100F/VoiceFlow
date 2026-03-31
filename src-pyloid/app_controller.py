@@ -15,7 +15,7 @@ from services.transcription import TranscriptionService
 from services.hotkey import HotkeyService
 from services.clipboard import ClipboardService
 from services.logger import info, error, debug, warning, exception
-from services.gpu import is_cuda_available, get_gpu_name, get_cuda_compute_types, validate_device_setting, get_cudnn_status, reset_cuda_cache, has_nvidia_gpu
+from services.gpu import is_cuda_available, get_gpu_name, get_cuda_compute_types, validate_device_setting, get_cudnn_status, reset_cuda_cache, has_nvidia_gpu, detect_gpu_vendor, get_rocm_status
 from services.cudnn_downloader import download_cudnn, is_cuda_libs_installed, get_download_size_mb, get_download_progress, clear_cuda_dir
 
 
@@ -324,6 +324,8 @@ class AppController:
         cudnn_available, cudnn_message = get_cudnn_status()
         # Always try to get GPU name (to show "GPU detected but cuDNN missing")
         gpu_name = get_gpu_name()
+        vendor = detect_gpu_vendor()
+        rocm_available, rocm_message = get_rocm_status()
         return {
             "cudaAvailable": cuda_available,
             "deviceCount": 1 if cuda_available else 0,
@@ -333,6 +335,9 @@ class AppController:
             "currentComputeType": self.transcription_service.get_current_compute_type(),
             "cudnnAvailable": cudnn_available,
             "cudnnMessage": cudnn_message,
+            "gpuVendor": vendor,
+            "rocmAvailable": rocm_available,
+            "rocmMessage": rocm_message,
         }
 
     def validate_device(self, device: str) -> dict:
