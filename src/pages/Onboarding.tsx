@@ -320,12 +320,23 @@ const StepHardware = ({
   };
 
   const selectedDevice = DEVICE_OPTIONS.find((d) => d.id === device);
-  const showDownloadButton = gpuInfo?.gpuName && !gpuInfo?.cudnnAvailable;
+  const showDownloadButton = gpuInfo?.gpuName && !gpuInfo?.cudnnAvailable && gpuInfo?.gpuVendor !== "amd";
 
   // Determine resolved device for display
   const resolvedDevice = device === "auto"
-    ? (gpuInfo?.cudaAvailable ? "CUDA" : "CPU")
-    : device.toUpperCase();
+    ? (gpuInfo?.cudaAvailable ? "CUDA" : gpuInfo?.rocmAvailable ? "ROCm" : "CPU")
+    : device === "cuda" && gpuInfo?.gpuVendor === "amd" ? "ROCm" : device.toUpperCase();
+
+  // Vendor-aware overrides for the "cuda" device option when AMD GPU is detected
+  const isAmd = gpuInfo?.gpuVendor === "amd";
+  const cudaDisplayLabel = isAmd ? "GPU (ROCm)" : "CUDA GPU";
+  const cudaDisplayDesc = isAmd ? "AMD/ROCm" : "NVIDIA Only";
+  const cudaDisplayDescription = isAmd
+    ? "Uses AMD GPU with ROCm acceleration for maximum transcription speed. Requires AMD GPU with ROCm toolkit and ctranslate2-rocm."
+    : "Uses NVIDIA GPU with CUDA acceleration for maximum transcription speed. Requires compatible NVIDIA GPU with CUDA libraries (cuDNN + cuBLAS).";
+  const cudaDisplayBestFor = isAmd
+    ? "Users with AMD GPUs who want GPU-accelerated transcription via ROCm."
+    : "Users with NVIDIA GPUs who want the fastest possible transcription.";
 
   return (
     <div className="flex gap-6 w-full max-w-5xl">
@@ -337,7 +348,7 @@ const StepHardware = ({
             Compute Device
           </span>
           <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-            resolvedDevice === "CUDA"
+            resolvedDevice === "CUDA" || resolvedDevice === "ROCm"
               ? "bg-green-500/10 text-green-500"
               : "bg-muted text-muted-foreground"
           }`}>
@@ -352,7 +363,7 @@ const StepHardware = ({
         >
           {DEVICE_OPTIONS.map((d) => {
             const isActive = device === d.id;
-            const isDisabled = d.id === "cuda" && !gpuInfo?.cudaAvailable;
+            const isDisabled = d.id === "cuda" && !gpuInfo?.cudaAvailable && !gpuInfo?.rocmAvailable;
             const DeviceIcon = d.icon;
 
             return (
@@ -391,10 +402,10 @@ const StepHardware = ({
                 </div>
                 <div>
                   <span className={`font-medium text-sm block ${isActive ? "text-primary" : "text-foreground"}`}>
-                    {d.label}
+                    {d.id === "cuda" ? cudaDisplayLabel : d.label}
                   </span>
                   <span className="text-[10px] text-muted-foreground/70">
-                    {d.desc}
+                    {d.id === "cuda" ? cudaDisplayDesc : d.desc}
                   </span>
                 </div>
                 {isDisabled && (
@@ -473,12 +484,16 @@ const StepHardware = ({
             <>
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-lg text-foreground">{selectedDevice.label}</h3>
+                  <h3 className="font-semibold text-lg text-foreground">
+                    {selectedDevice.id === "cuda" ? cudaDisplayLabel : selectedDevice.label}
+                  </h3>
                   <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted/50 text-muted-foreground">
                     {selectedDevice.detail}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground">{selectedDevice.desc}</p>
+                <p className="text-xs text-muted-foreground">
+                  {selectedDevice.id === "cuda" ? cudaDisplayDesc : selectedDevice.desc}
+                </p>
               </div>
 
               {/* Best for */}
@@ -488,7 +503,7 @@ const StepHardware = ({
                   Best for
                 </div>
                 <p className="text-xs text-foreground/80 leading-relaxed">
-                  {selectedDevice.bestFor}
+                  {selectedDevice.id === "cuda" ? cudaDisplayBestFor : selectedDevice.bestFor}
                 </p>
               </div>
 
@@ -499,7 +514,7 @@ const StepHardware = ({
                   About
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  {selectedDevice.description}
+                  {selectedDevice.id === "cuda" ? cudaDisplayDescription : selectedDevice.description}
                 </p>
               </div>
             </>
@@ -511,16 +526,16 @@ const StepHardware = ({
               <span className="text-xs font-medium text-muted-foreground">Hardware Status</span>
               <span
                 className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                  gpuInfo?.cudaAvailable
+                  gpuInfo?.cudaAvailable || (isAmd && gpuInfo?.rocmAvailable)
                     ? "bg-green-500/10 text-green-500"
-                    : gpuInfo?.gpuName && !gpuInfo?.cudnnAvailable
+                    : gpuInfo?.gpuName && (isAmd ? !gpuInfo?.rocmAvailable : !gpuInfo?.cudnnAvailable)
                       ? "bg-amber-500/10 text-amber-500"
                       : "bg-muted text-muted-foreground"
                 }`}
               >
-                {gpuInfo?.cudaAvailable
+                {gpuInfo?.cudaAvailable || (isAmd && gpuInfo?.rocmAvailable)
                   ? "Ready"
-                  : gpuInfo?.gpuName && !gpuInfo?.cudnnAvailable
+                  : gpuInfo?.gpuName && (isAmd ? !gpuInfo?.rocmAvailable : !gpuInfo?.cudnnAvailable)
                     ? "Setup Needed"
                     : "CPU Mode"}
               </span>
@@ -540,18 +555,34 @@ const StepHardware = ({
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="p-2.5 rounded-lg bg-secondary/30">
-                    <p className="text-[10px] text-muted-foreground">CUDA</p>
-                    <p className={`text-xs font-medium ${gpuInfo.cudaAvailable ? "text-green-500" : "text-muted-foreground"}`}>
-                      {gpuInfo.cudaAvailable ? "Available" : "Unavailable"}
-                    </p>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-secondary/30">
-                    <p className="text-[10px] text-muted-foreground">cuDNN</p>
-                    <p className={`text-xs font-medium ${gpuInfo.cudnnAvailable ? "text-green-500" : "text-amber-500"}`}>
-                      {gpuInfo.cudnnAvailable ? "Installed" : "Missing"}
-                    </p>
-                  </div>
+                  {isAmd ? (
+                    <>
+                      <div className="p-2.5 rounded-lg bg-secondary/30 col-span-2">
+                        <p className="text-[10px] text-muted-foreground">ROCm</p>
+                        <p className={`text-xs font-medium ${gpuInfo.rocmAvailable ? "text-green-500" : "text-amber-500"}`}>
+                          {gpuInfo.rocmAvailable ? "Available" : "Unavailable"}
+                        </p>
+                        {gpuInfo.rocmMessage && (
+                          <p className="text-[9px] text-muted-foreground mt-0.5">{gpuInfo.rocmMessage}</p>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="p-2.5 rounded-lg bg-secondary/30">
+                        <p className="text-[10px] text-muted-foreground">CUDA</p>
+                        <p className={`text-xs font-medium ${gpuInfo.cudaAvailable ? "text-green-500" : "text-muted-foreground"}`}>
+                          {gpuInfo.cudaAvailable ? "Available" : "Unavailable"}
+                        </p>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-secondary/30">
+                        <p className="text-[10px] text-muted-foreground">cuDNN</p>
+                        <p className={`text-xs font-medium ${gpuInfo.cudnnAvailable ? "text-green-500" : "text-amber-500"}`}>
+                          {gpuInfo.cudnnAvailable ? "Installed" : "Missing"}
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {gpuInfo.supportedComputeTypes && gpuInfo.supportedComputeTypes.length > 0 && (
@@ -579,11 +610,15 @@ const StepHardware = ({
 
             {/* Status message */}
             <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
-              {gpuInfo?.cudaAvailable
-                ? "Your system is fully configured for GPU acceleration."
-                : gpuInfo?.gpuName && !gpuInfo?.cudnnAvailable
-                  ? "Download CUDA libraries from the left panel to enable GPU acceleration."
-                  : "No compatible NVIDIA GPU detected. CPU transcription works well but is slower."}
+              {isAmd
+                ? gpuInfo?.rocmAvailable
+                  ? "Your AMD GPU is configured for ROCm acceleration."
+                  : "Install ROCm toolkit and ctranslate2-rocm for GPU acceleration."
+                : gpuInfo?.cudaAvailable
+                  ? "Your system is fully configured for GPU acceleration."
+                  : gpuInfo?.gpuName && !gpuInfo?.cudnnAvailable
+                    ? "Download CUDA libraries from the left panel to enable GPU acceleration."
+                    : "No compatible NVIDIA GPU detected. CPU transcription works well but is slower."}
             </p>
           </div>
         </div>
