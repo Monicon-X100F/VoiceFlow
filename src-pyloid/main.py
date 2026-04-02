@@ -5,7 +5,7 @@ import os
 # Linux: Preload CUDA libraries from nvidia pip packages before any CUDA imports
 # ============================================================================
 if sys.platform.startswith('linux'):
-    def _preload_nvidia_libs():
+    def _preload_nvidia_pip_libs():
         """Preload nvidia .so libs from pip packages so ctranslate2/faster-whisper can find them."""
         import ctypes
         venv_sp = os.path.join(sys.prefix, 'lib', f'python{sys.version_info.major}.{sys.version_info.minor}', 'site-packages')
@@ -23,8 +23,42 @@ if sys.platform.startswith('linux'):
                     except OSError:
                         pass
 
+    def _preload_rocm_libs():
+        """Preload ROCm .so libraries if available."""
+        import ctypes
+        rocm_lib_paths = [
+            "/opt/rocm/lib",
+            "/opt/rocm/hip/lib",
+        ]
+        rocm_libs = ["libamdhip64.so", "librocblas.so", "libhipblas.so"]
+
+        for lib_path in rocm_lib_paths:
+            if not os.path.isdir(lib_path):
+                continue
+            for lib_name in rocm_libs:
+                full_path = os.path.join(lib_path, lib_name)
+                if os.path.exists(full_path):
+                    try:
+                        ctypes.CDLL(full_path, mode=ctypes.RTLD_GLOBAL)
+                    except OSError:
+                        pass
+
+    def _preload_gpu_libs():
+        """Preload GPU .so libs so ctranslate2 can find them."""
+        _preload_nvidia_pip_libs()
+        _preload_rocm_libs()
+
+    # Help ROCm find its libraries
+    if os.path.isdir("/opt/rocm"):
+        rocm_path = "/opt/rocm"
+        os.environ.setdefault("ROCM_PATH", rocm_path)
+        ld_path = os.environ.get("LD_LIBRARY_PATH", "")
+        rocm_lib = os.path.join(rocm_path, "lib")
+        if rocm_lib not in ld_path:
+            os.environ["LD_LIBRARY_PATH"] = rocm_lib + ":" + ld_path
+
     try:
-        _preload_nvidia_libs()
+        _preload_gpu_libs()
     except Exception:
         pass  # Best-effort, don't crash on failure
 
