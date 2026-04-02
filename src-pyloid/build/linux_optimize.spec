@@ -1,3 +1,6 @@
+# Note: ROCm/HIP libraries for AMD GPU support are loaded from the system
+# (/opt/rocm/lib) at runtime and are not bundled with the application.
+
 PySide6/Qt/translations/*.qm
 PySide6/Qt/translations/qtwebengine_locales/*.pak
 !PySide6/Qt/translations/qtwebengine_locales/en-US.pak
