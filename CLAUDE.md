@@ -32,6 +32,9 @@ cd VoiceFlow && uv run -p .venv pytest src-pyloid/tests/
 # Run single test file
 uv run -p .venv pytest src-pyloid/tests/test_transcription.py -v
 
+# AMD GPU setup (Linux only, requires ROCm toolkit)
+bash scripts/setup-rocm.sh
+
 # Run frontend only (for UI development)
 pnpm run vite
 
@@ -58,6 +61,7 @@ Python backend using Pyloid framework with PySide6:
 - `database.py` - SQLite database for settings and history (stored at ~/.VoiceFlow/VoiceFlow.db)
 - `logger.py` - Domain-based logging with hybrid format `[timestamp] [LEVEL] [domain] message | {json}`. Supports domains: model, audio, hotkey, settings, database, clipboard, window. Configured with 100MB log rotation.
 - `model_manager.py` - Whisper model download/cache management using huggingface_hub. Provides download progress tracking (percent, speed, ETA), cancellation via CancelToken, daemon thread execution, and `clear_cache()` to delete only VoiceFlow's faster-whisper models.
+- `gpu.py` - GPU detection and management. Supports NVIDIA (CUDA/cuDNN) and AMD (ROCm/HIP). Detects GPU vendor, checks library availability, validates device settings. Note: `device="cuda"` works for both NVIDIA and AMD (HIP provides CUDA compatibility layer).
 
 ### Frontend (src/)
 
@@ -96,6 +100,14 @@ popup_window.invoke('popup-state', {'state': 'recording'})
 7. `ClipboardService.paste_at_cursor` pastes text
 8. History saved to database
 9. Popup returns to "idle" state
+
+### GPU Acceleration
+
+VoiceFlow supports GPU acceleration via:
+- **NVIDIA**: CUDA + cuDNN (auto-detected via nvidia-smi and ctranslate2)
+- **AMD**: ROCm/HIP (auto-detected via rocm-smi, requires ctranslate2-rocm fork)
+
+Both use `device="cuda"` in faster-whisper/ctranslate2 — HIP provides a CUDA compatibility layer, so the transcription code is vendor-agnostic. GPU vendor detection (`detect_gpu_vendor()`) determines which library checks to run.
 
 ### Qt Threading Pattern
 
@@ -144,6 +156,8 @@ For transparent popup windows on Windows:
 - **Qt WebEngine flags**: `QTWEBENGINE_ENABLE_LINUX_ACCESSIBILITY=0` and Chromium flags (`--use-gl=egl`, `--disable-gpu-sandbox`) set in `main.py` to improve rendering performance
 - **Hyprland rules**: `_setup_hyprland_window_rules()` in `main.py` configures popup as floating, pinned, no-focus via `hyprctl`
 - **Multi-monitor**: `get_active_monitor_info()` re-detects cursor monitor on each recording start
+- **ROCm GPU support**: AMD GPUs use ROCm/HIP via a ctranslate2 community fork. Libraries loaded from `/opt/rocm/lib` at runtime. Setup helper: `scripts/setup-rocm.sh`
+- **GPU library preloading**: `main.py` preloads both NVIDIA pip-package libs and ROCm system libs at startup via `_preload_gpu_libs()`
 
 ## Testing
 
@@ -151,6 +165,7 @@ Python tests use pytest and are in `src-pyloid/tests/`. Test files include:
 - `test_logger.py` - Logger infrastructure tests
 - `test_model_manager.py` - Model download/cache management tests
 - `test_transcription.py` - Transcription service tests (slow, downloads model on first run)
+- `test_gpu_amd.py` - AMD GPU detection, ROCm status, and vendor-aware validation tests (all mocked, no GPU required)
 - `test_audio.py`, `test_hotkey.py`, `test_clipboard.py`, `test_settings.py`, `test_app_controller.py`
 
 ## UI Components
