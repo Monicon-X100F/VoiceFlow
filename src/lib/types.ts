@@ -93,6 +93,9 @@ export interface GpuInfo {
   currentComputeType: string;
   cudnnAvailable: boolean;
   cudnnMessage: string | null;
+  gpuVendor: "nvidia" | "amd" | null;
+  rocmAvailable: boolean;
+  rocmMessage: string | null;
 }
 
 export interface DeviceValidation {
