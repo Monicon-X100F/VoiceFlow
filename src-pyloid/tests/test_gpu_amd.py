@@ -123,7 +123,18 @@ class TestRocmLibsAvailable:
         assert ok is True
         assert err is None
 
-    def test_missing_lib(self):
+    def test_missing_hip_lib(self):
+        def fake_cdll(name):
+            if name == "libamdhip64.so":
+                raise OSError("not found")
+            return MagicMock()
+
+        with patch("ctypes.CDLL", side_effect=fake_cdll):
+            ok, err = _check_rocm_libs_available()
+        assert ok is False
+        assert "libamdhip64.so" in err
+
+    def test_missing_rocblas(self):
         def fake_cdll(name):
             if name == "librocblas.so":
                 raise OSError("not found")
@@ -147,10 +158,15 @@ class TestRocmCtranslate2:
         with patch.dict("sys.modules", {"ctranslate2": fake_ct2}):
             assert _check_rocm_ctranslate2() is True
 
-    def test_standard_ct2(self):
+    def test_standard_ct2_no_cuda(self):
         fake_ct2 = MagicMock()
-        fake_ct2.get_supported_compute_types.side_effect = Exception("no ROCm")
+        fake_ct2.get_supported_compute_types.side_effect = RuntimeError("no ROCm")
         with patch.dict("sys.modules", {"ctranslate2": fake_ct2}):
+            assert _check_rocm_ctranslate2() is False
+
+    def test_import_error(self):
+        """ctranslate2 module not importable → False."""
+        with patch.dict("sys.modules", {"ctranslate2": None}):
             assert _check_rocm_ctranslate2() is False
 
 
@@ -194,6 +210,20 @@ class TestIsCudaAvailableAmd:
              patch.object(gpu_module, "_check_rocm_ctranslate2", return_value=False):
             assert is_cuda_available() is False
 
+    def test_nvidia_still_works(self):
+        """NVIDIA vendor + cuDNN OK → True (regression check)."""
+        fake_ct2 = self._make_ct2(["float16"])
+        with patch.dict("sys.modules", {"ctranslate2": fake_ct2}), \
+             patch.object(gpu_module, "detect_gpu_vendor", return_value="nvidia"), \
+             patch.object(gpu_module, "_check_cudnn_available", return_value=(True, None)):
+            assert is_cuda_available() is True
+
+    def test_no_gpu_returns_false(self):
+        """ctranslate2 reports no CUDA compute types → False."""
+        fake_ct2 = self._make_ct2([])
+        with patch.dict("sys.modules", {"ctranslate2": fake_ct2}):
+            assert is_cuda_available() is False
+
 
 # ---------------------------------------------------------------------------
 # TestGetGpuNameAmd
@@ -216,7 +246,7 @@ class TestGetGpuNameAmd:
             name = get_gpu_name()
         assert name == "Radeon RX 7900 XTX"
 
-    def test_fallback_to_none(self):
+    def test_both_fail_returns_none(self):
         """Both nvidia-smi and rocm-smi fail → None."""
         def fake_run(args, **kwargs):
             raise FileNotFoundError
@@ -224,6 +254,20 @@ class TestGetGpuNameAmd:
         with patch("subprocess.run", side_effect=fake_run):
             name = get_gpu_name()
         assert name is None
+
+    def test_nvidia_name_still_works(self):
+        """nvidia-smi returns name → correct name (regression)."""
+        def fake_run(args, **kwargs):
+            if args[0] == "nvidia-smi":
+                r = MagicMock()
+                r.returncode = 0
+                r.stdout = "NVIDIA GeForce RTX 4090\n"
+                return r
+            raise FileNotFoundError
+
+        with patch("subprocess.run", side_effect=fake_run):
+            name = get_gpu_name()
+        assert name == "NVIDIA GeForce RTX 4090"
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +320,8 @@ def _make_controller():
     for mod in [
         "services.audio", "services.hotkey", "services.clipboard",
         "services.database", "services.settings", "services.cudnn_downloader",
-        "sounddevice", "numpy", "keyboard", "pyloid",
+        "services.transcription", "services.model_manager",
+        "sounddevice", "numpy", "keyboard", "pyloid", "faster_whisper",
     ]:
         sys.modules.setdefault(mod, MagicMock())
 
@@ -409,3 +454,9 @@ class TestValidateDeviceSetting:
             valid, err = validate_device_setting("auto")
         assert valid is True
         assert err is None
+
+    def test_invalid_device(self):
+        """device='tpu' → (False, 'Invalid device option...')."""
+        valid, err = validate_device_setting("tpu")
+        assert valid is False
+        assert "Invalid device option" in err
