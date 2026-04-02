@@ -464,6 +464,21 @@ def get_gpu_count() -> int:
     except Exception:
         pass
 
+    # Try AMD via rocm-smi
+    try:
+        result = subprocess.run(
+            ["rocm-smi", "--showid"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            count = sum(1 for line in result.stdout.splitlines() if line.strip().startswith("GPU"))
+            if count > 0:
+                return count
+    except Exception:
+        pass
+
     # Fallback: if CUDA is available, assume at least 1 GPU
     return 1
 

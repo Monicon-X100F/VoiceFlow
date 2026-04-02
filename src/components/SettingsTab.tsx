@@ -621,7 +621,9 @@ export function SettingsTab() {
                     {device === "auto"
                       ? "Auto (Recommended)"
                       : device === "cuda"
-                        ? `CUDA${!gpuInfo?.cudaAvailable ? " (Unavailable)" : ""}`
+                        ? gpuInfo?.gpuVendor === "amd"
+                          ? `GPU (ROCm)${!gpuInfo?.cudaAvailable ? " (Unavailable)" : ""}`
+                          : `CUDA${!gpuInfo?.cudaAvailable ? " (Unavailable)" : ""}`
                         : "CPU"}
                   </SelectItem>
                 ))}
