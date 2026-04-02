@@ -637,15 +637,20 @@ export function SettingsTab() {
                   <span className={
                     gpuInfo.cudaAvailable
                       ? "text-green-500"
-                      : gpuInfo.gpuName && !gpuInfo.cudnnAvailable
+                      : (gpuInfo.gpuVendor === "amd" && !gpuInfo.rocmAvailable) ||
+                        (gpuInfo.gpuVendor !== "amd" && gpuInfo.gpuName && !gpuInfo.cudnnAvailable)
                         ? "text-amber-500"
                         : "text-muted-foreground"
                   }>
                     {gpuInfo.cudaAvailable
-                      ? "CUDA Available"
-                      : gpuInfo.gpuName && !gpuInfo.cudnnAvailable
-                        ? "cuDNN Missing"
-                        : "CPU Only"}
+                      ? gpuInfo.gpuVendor === "amd"
+                        ? "ROCm Available"
+                        : "CUDA Available"
+                      : gpuInfo.gpuVendor === "amd" && !gpuInfo.rocmAvailable
+                        ? "ROCm Setup Needed"
+                        : gpuInfo.gpuVendor !== "amd" && gpuInfo.gpuName && !gpuInfo.cudnnAvailable
+                          ? "cuDNN Missing"
+                          : "CPU Only"}
                   </span>
                 </div>
                 {gpuInfo.gpuName && (
@@ -662,7 +667,12 @@ export function SettingsTab() {
                     {gpuInfo.currentDevice.toUpperCase()} ({gpuInfo.currentComputeType})
                   </span>
                 </div>
-                {gpuInfo.gpuName && !gpuInfo.cudnnAvailable && (
+                {gpuInfo.gpuVendor === "amd" && !gpuInfo.rocmAvailable && (
+                  <p className="text-xs text-amber-500 pt-1">
+                    Install ROCm toolkit and ctranslate2-rocm for GPU acceleration.
+                  </p>
+                )}
+                {gpuInfo.gpuVendor !== "amd" && gpuInfo.gpuName && !gpuInfo.cudnnAvailable && (
                   <p className="text-xs text-amber-500 pt-1">
                     Install cuDNN 9.x for GPU acceleration
                   </p>
