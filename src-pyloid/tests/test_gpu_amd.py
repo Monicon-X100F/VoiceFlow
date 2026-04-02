@@ -22,6 +22,7 @@ _check_rocm_ctranslate2 = gpu_module._check_rocm_ctranslate2
 get_gpu_name = gpu_module.get_gpu_name
 is_cuda_available = gpu_module.is_cuda_available
 get_rocm_status = gpu_module.get_rocm_status
+validate_device_setting = gpu_module.validate_device_setting
 GpuInfo = gpu_module.GpuInfo
 
 
@@ -339,3 +340,72 @@ class TestGetGpuInfoVendorFields:
         assert info["gpuVendor"] is None
         assert info["rocmAvailable"] is False
         assert info["cudnnAvailable"] is False
+
+
+# ---------------------------------------------------------------------------
+# TestValidateDeviceSetting
+# ---------------------------------------------------------------------------
+
+class TestValidateDeviceSetting:
+    def setup_method(self):
+        _reset_caches()
+
+    def test_validate_cuda_with_working_amd(self):
+        """AMD fully configured, is_cuda_available() returns True → (True, None)."""
+        with patch.object(gpu_module, "is_cuda_available", return_value=True):
+            valid, err = validate_device_setting("cuda")
+        assert valid is True
+        assert err is None
+
+    def test_validate_cuda_amd_no_rocm(self):
+        """AMD GPU, ROCm libs missing → error about ROCm not installed."""
+        with patch.object(gpu_module, "is_cuda_available", return_value=False), \
+             patch.object(gpu_module, "detect_gpu_vendor", return_value="amd"), \
+             patch.object(gpu_module, "_check_rocm_libs_available",
+                          return_value=(False, "ROCm library not found")):
+            valid, err = validate_device_setting("cuda")
+        assert valid is False
+        assert "ROCm is not installed" in err
+
+    def test_validate_cuda_amd_no_ct2(self):
+        """AMD GPU, ROCm libs OK, ctranslate2 lacks ROCm support → error about setup-rocm.sh."""
+        with patch.object(gpu_module, "is_cuda_available", return_value=False), \
+             patch.object(gpu_module, "detect_gpu_vendor", return_value="amd"), \
+             patch.object(gpu_module, "_check_rocm_libs_available", return_value=(True, None)), \
+             patch.object(gpu_module, "_check_rocm_ctranslate2", return_value=False):
+            valid, err = validate_device_setting("cuda")
+        assert valid is False
+        assert "ctranslate2 lacks ROCm" in err
+
+    def test_validate_cuda_nvidia_no_cudnn(self):
+        """NVIDIA GPU, CUDA detected but cuDNN missing → existing NVIDIA error preserved."""
+        fake_ct2 = MagicMock()
+        fake_ct2.get_supported_compute_types.return_value = ["float32"]
+        with patch.object(gpu_module, "is_cuda_available", return_value=False), \
+             patch.object(gpu_module, "detect_gpu_vendor", return_value="nvidia"), \
+             patch.dict("sys.modules", {"ctranslate2": fake_ct2}):
+            valid, err = validate_device_setting("cuda")
+        assert valid is False
+        assert "cuDNN is not installed" in err
+
+    def test_validate_cuda_no_gpu(self):
+        """No GPU detected → 'No compatible GPU detected.'"""
+        with patch.object(gpu_module, "is_cuda_available", return_value=False), \
+             patch.object(gpu_module, "detect_gpu_vendor", return_value=None):
+            valid, err = validate_device_setting("cuda")
+        assert valid is False
+        assert "No compatible GPU detected" in err
+
+    def test_validate_cpu_always_valid(self):
+        """device='cpu' is always valid regardless of GPU state."""
+        with patch.object(gpu_module, "is_cuda_available", return_value=False):
+            valid, err = validate_device_setting("cpu")
+        assert valid is True
+        assert err is None
+
+    def test_validate_auto_always_valid(self):
+        """device='auto' is always valid regardless of GPU state."""
+        with patch.object(gpu_module, "is_cuda_available", return_value=False):
+            valid, err = validate_device_setting("auto")
+        assert valid is True
+        assert err is None

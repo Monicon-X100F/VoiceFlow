@@ -534,16 +534,26 @@ def validate_device_setting(device: str) -> tuple[bool, Optional[str]]:
 
     if device == "cuda":
         if not is_cuda_available():
-            # Check why CUDA is not available
-            try:
-                import ctranslate2
-                compute_types = ctranslate2.get_supported_compute_types("cuda")
-                if len(compute_types) > 0:
-                    # CUDA detected but cuDNN missing
-                    return False, "CUDA detected but cuDNN is not installed. Install cuDNN 9.x or use CPU mode."
-            except Exception:
-                pass
-            return False, "CUDA is not available. Please install NVIDIA drivers and CUDA toolkit."
+            vendor = detect_gpu_vendor()
+            if vendor == "amd":
+                rocm_ok, rocm_msg = _check_rocm_libs_available()
+                if not rocm_ok:
+                    return False, "AMD GPU detected but ROCm is not installed. Install ROCm toolkit or use CPU mode."
+                if not _check_rocm_ctranslate2():
+                    return False, "ROCm installed but ctranslate2 lacks ROCm support. Run scripts/setup-rocm.sh."
+                return False, "AMD GPU and ROCm detected but CUDA acceleration is not working."
+            elif vendor == "nvidia":
+                # Keep existing NVIDIA error logic
+                try:
+                    import ctranslate2
+                    compute_types = ctranslate2.get_supported_compute_types("cuda")
+                    if len(compute_types) > 0:
+                        return False, "CUDA detected but cuDNN is not installed. Install cuDNN 9.x or use CPU mode."
+                except Exception:
+                    pass
+                return False, "CUDA is not available. Please install NVIDIA drivers and CUDA toolkit."
+            else:
+                return False, "No compatible GPU detected. Use CPU mode."
 
     return True, None
 
